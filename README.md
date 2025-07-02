@@ -1,2 +1,2 @@
 # MediJane-Wix-Site
-This repository houses the source code and additional Wix plugins required for MediJane's Wix Site developed as part of the Virginia Tech Graduate Software Engineering Capstone. 
+This repo houses the backend codebase for the patient registration portal per the VT Capstone Prpject 
