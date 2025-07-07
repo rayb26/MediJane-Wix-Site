@@ -1,0 +1,15 @@
+class MedicalHistory:
+    def __init__(self, data):
+        self.first_name = data.get('first_name')
+        self.last_name = data.get('last_name')
+        self.birth_date = data.get('birth_date')
+        self.gender = data.get('gender')
+        self.weight = data.get('weight')
+        self.height = data.get('height')
+        self.allergies = data.get('allergies')
+        self.medications = data.get('medications')
+        self.conditions = data.get('conditions')
+        self.injuries = data.get('injuries')
+        self.has_used_cannabis = data.get('has_used_cannabis')
+        self.reason_for_visit = data.get('reason_for_visit')
+        self.additional_comments = data.get('additional_comments')
