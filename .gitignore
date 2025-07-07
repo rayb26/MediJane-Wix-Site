@@ -10,10 +10,10 @@ src/__pycache__/
 .env 
 venv/
 venv
-
+  src/models/utils/__pycache__
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-
+src/models/utils/__pycache__/user_model.cpython-312.pyc
 # Runtime data
 pids
 *.pid
