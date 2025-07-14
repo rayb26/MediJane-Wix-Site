@@ -12,6 +12,8 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     phone = db.Column(db.String(20), nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(20), nullable=False,
+                     default='user')  # Add this line
 
     def set_password(self, password):
         self.password_hash = bcrypt.generate_password_hash(
@@ -42,3 +44,16 @@ class MedicalHistoryModel(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='medical_profiles')
+
+
+class Appointment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(80), db.ForeignKey(
+        'user.username'), nullable=False)
+    day = db.Column(db.String(20), nullable=False)
+    time = db.Column(db.String(20), nullable=False)
+    location = db.Column(db.String(100), nullable=False)
+    provider = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='appointments')

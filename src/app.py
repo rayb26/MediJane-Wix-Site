@@ -5,9 +5,10 @@ from flask_cors import CORS
 # from models.utils.user_model import db, bcrypt, User
 from config import Config
 from models.utils.medical_history import MedicalHistory
-from models.utils.helpers import get_username_from_token
+from models.utils.helpers import get_username_from_token, get_username_from_token
 from flask_jwt_extended.exceptions import JWTDecodeError
-from models.utils.models import User, db, bcrypt, MedicalHistoryModel
+from models.utils.models import User, db, bcrypt, MedicalHistoryModel, Appointment
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 from dotenv import load_dotenv
@@ -52,6 +53,27 @@ def register():
     return jsonify({'message': 'User registered successfully'}), 201
 
 
+@jwt_required
+@app.route('/change-password', methods=['POST'])
+def change_password():
+    data = request.get_json()
+    new_password = data.get('newPassword')
+    username = data.get("username")
+
+    if not new_password:
+        return jsonify({'message': 'New password is required'}), 400
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    user.set_password(new_password)
+    db.session.commit()
+
+    return jsonify({'message': 'Password changed successfully'}), 200
+
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -59,13 +81,66 @@ def login():
     password = data.get('password')
 
     user = User.query.filter_by(username=username).first()
-    print("user is " + str(user))
     if user and user.check_password(password):
         access_token = create_access_token(identity=user.username)
 
         return jsonify({'token': access_token}), 200
     else:
         return jsonify({'message': 'Invalid username or password'}), 401
+
+
+@app.route('/book-appointment', methods=['POST'])
+def book_appointment():
+    data = request.get_json()
+
+    username = data.get('username')
+    day = data.get('day')
+    time = data.get('time')
+    location = data.get('location')
+    provider = data.get('provider')
+
+    if not username:
+        return jsonify({'error': 'Missing username'}), 400
+
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    appointment = Appointment(
+        user_id=user.username,
+        day=day,
+        time=time,
+        location=location,
+        provider=provider
+    )
+
+    db.session.add(appointment)
+    db.session.commit()
+
+    return jsonify({'message': 'Appointment booked successfully'}), 200
+
+
+@app.route('/appointment/<username>', methods=['GET'])
+def get_appointment(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    appointment = Appointment.query.filter_by(
+        user_id=user.username
+    ).order_by(Appointment.created_at.desc()).first()
+
+    if not appointment:
+        return jsonify({'message': 'No appointment found'}), 404
+
+    return jsonify({
+        'appointment': {
+            'day': appointment.day,
+            'time': appointment.time,
+            'location': appointment.location,
+            'provider': appointment.provider
+        }
+    }), 200
 
 
 @app.route('/medical-history', methods=['POST'])
@@ -112,10 +187,8 @@ def submit_medical_history():
         return jsonify({'message': 'Successfully Created Medical History'}), 200
 
     except JWTDecodeError as e:
-        print("JWT decode error:", e)
         return jsonify({'message': 'Invalid token'}), 401
     except Exception as e:
-        print("Unexpected error:", e)
         return jsonify({'message': 'Error processing token'}), 400
 
 
@@ -125,7 +198,8 @@ def get_medical_history(username):
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
-    history_records = MedicalHistory.query.filter_by(user_id=user.id).all()
+    history_records = MedicalHistoryModel.query.filter_by(
+        user_id=user.username).all()
 
     if not history_records:
         return jsonify({'message': 'No medical history found'}), 404
@@ -151,6 +225,27 @@ def get_medical_history(username):
         })
 
     return jsonify({'medical_history': history_data}), 200
+
+
+@app.route('/cancel-appointment', methods=['DELETE'])
+def cancel_appointment():
+    data = request.get_json()
+
+    username = data.get("username")
+    if not username:
+        return jsonify({'message': 'User not found'}), 404
+
+    user = User.query.filter_by(username=username).first()
+
+    appointment = Appointment.query.filter_by(user_id=user.username).first()
+
+    if not appointment:
+        return jsonify({'message': 'No appointment to cancel'}), 404
+
+    db.session.delete(appointment)
+    db.session.commit()
+
+    return jsonify({'message': 'Appointment cancelled successfully'}), 200
 
 
 @app.route('/medical-history/<username>', methods=['PUT'])
@@ -190,6 +285,21 @@ def role_required(required_role):
                 return jsonify({'message': 'Access forbidden: insufficient permissions'}), 403
             return fn(*args, **kwargs)
         return decorated
+    return wrapper
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        username = request.get_json().get("username")
+        if not username:
+            return jsonify({"message": "unable to parse request"}, 400)
+        user = User.query.filter_by(username=username).first()
+
+        if not user or user.role != 'admin':
+            return jsonify({'message': 'Admins only!'}), 403
+
+        return fn(*args, **kwargs)
     return wrapper
 
 
