@@ -1,12 +1,13 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
+from models.utils.user_model import User
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 
-class MedicalHistory(db.Model):
+class MedicalHistoryModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
