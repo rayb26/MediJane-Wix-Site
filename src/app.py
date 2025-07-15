@@ -249,29 +249,48 @@ def cancel_appointment():
 
 
 @app.route('/medical-history/<username>', methods=['PUT'])
+@jwt_required()
 def update_latest_medical_history(username):
-    data = request.get_json()
+    current_identity = get_jwt_identity()
+    if current_identity != username:
+        return jsonify({'message': 'Unauthorized'}), 403
 
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
-    history_entry = MedicalHistory.query.filter_by(user_id=user.id) \
-                                        .order_by(MedicalHistory.created_at.desc()) \
-                                        .first()
+    history_entry = MedicalHistoryModel.query.filter_by(user_id=user.username) \
+                                             .order_by(MedicalHistoryModel.created_at.desc()) \
+                                             .first()
     if not history_entry:
         return jsonify({'message': 'No medical history to update'}), 404
 
-    for field in [
-        'first_name', 'last_name', 'birth_date', 'gender', 'weight', 'height',
-        'allergies', 'medications', 'conditions', 'injuries',
-        'has_used_cannabis', 'reason_for_visit', 'additional_comments'
-    ]:
-        if field in data:
-            setattr(history_entry, field, data[field])
+    data = request.get_json()
+
+    field_map = {
+        'firstName': 'first_name',
+        'lastName': 'last_name',
+        'dob': 'birth_date',
+        'gender': 'gender',
+        'weight': 'weight',
+        'height': 'height',
+        'allergies': 'allergies',
+        'medications': 'medications',
+        'conditions': 'conditions',
+        'injuries': 'injuries',
+        'cannabisUse': 'has_used_cannabis',
+        'reason': 'reason_for_visit',
+        'comments': 'additional_comments'
+    }
+
+    for key, model_field in field_map.items():
+        if key in data:
+            value = data[key]
+            if key == 'cannabisUse':
+                value = value == 'Yes'
+            setattr(history_entry, model_field, value)
 
     db.session.commit()
-
     return jsonify({'message': 'Medical history updated successfully'}), 200
 
 
