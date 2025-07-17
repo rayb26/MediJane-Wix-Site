@@ -10,7 +10,6 @@ from flask_jwt_extended.exceptions import JWTDecodeError
 from models.utils.models import User, db, bcrypt, MedicalHistoryModel, Appointment
 from werkzeug.security import check_password_hash, generate_password_hash
 
-
 from dotenv import load_dotenv
 
 app = Flask(__name__)
@@ -81,12 +80,13 @@ def login():
     password = data.get('password')
 
     user = User.query.filter_by(username=username).first()
-    if user and user.check_password(password):
-        access_token = create_access_token(identity=user.username)
 
+    if user and user.check_password(password):
+        access_token = create_access_token(identity={"username": user.username, "role": user.role})
         return jsonify({'token': access_token}), 200
     else:
         return jsonify({'message': 'Invalid username or password'}), 401
+
 
 
 @app.route('/book-appointment', methods=['POST'])
