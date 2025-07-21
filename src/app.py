@@ -1,5 +1,5 @@
 from functools import wraps
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, decode_token
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, decode_token, get_jwt
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 # from models.utils.user_model import db, bcrypt, User
@@ -52,8 +52,8 @@ def register():
     return jsonify({'message': 'User registered successfully'}), 201
 
 
-@jwt_required
 @app.route('/change-password', methods=['POST'])
+@jwt_required
 def change_password():
     data = request.get_json()
     new_password = data.get('newPassword')
@@ -82,7 +82,10 @@ def login():
     user = User.query.filter_by(username=username).first()
 
     if user and user.check_password(password):
-        access_token = create_access_token(identity={"username": user.username, "role": user.role})
+        access_token = create_access_token(
+        identity=user.username,  # just the username as a string
+        additional_claims={"role": user.role})  # put role in separate claims
+      
         return jsonify({'token': access_token}), 200
     else:
         return jsonify({'message': 'Invalid username or password'}), 401
@@ -292,6 +295,38 @@ def update_latest_medical_history(username):
 
     db.session.commit()
     return jsonify({'message': 'Medical history updated successfully'}), 200
+
+
+@app.route('/admin/patient-appointments', methods=['GET'])
+@jwt_required()
+def get_all_appointments():
+    identity = get_jwt_identity()
+    claims = get_jwt()
+    print("Identity:", identity)
+    print("Claims:", claims)
+
+    if claims.get('role') != 'admin':
+        return jsonify({'message': 'Admins only'}), 403
+
+    appointments = Appointment.query.all()
+    print(f"Found {len(appointments)} appointments")
+
+    results = []
+    for appt in appointments:
+        user = User.query.filter_by(username=appt.user_id).first()
+        if not user:
+            print(f"No user found for appointment user_id: {appt.user_id}")
+            continue
+        results.append({
+            'patient_id': user.username,
+            'username': user.username,
+            'date': appt.day,
+            'time': appt.time,
+        })
+
+    print("Results to return:", results)
+    return jsonify({'appointments': results}), 200
+
 
 
 def role_required(required_role):
