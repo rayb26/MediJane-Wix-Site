@@ -44,7 +44,7 @@ def register():
     if User.query.filter_by(username=username).first():
         return jsonify({'message': 'User with this username already exists'}), 409
 
-    user = User(username=username, email=email, phone=phone)
+    user = User(username=username, email=email, phone=phone, role="user")
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -83,13 +83,13 @@ def login():
 
     if user and user.check_password(password):
         access_token = create_access_token(
-        identity=user.username,  # just the username as a string
-        additional_claims={"role": user.role})  # put role in separate claims
-      
+            identity=user.username,  # just the username as a string
+            # put role in separate claims
+            additional_claims={"role": user.role})
+
         return jsonify({'token': access_token}), 200
     else:
         return jsonify({'message': 'Invalid username or password'}), 401
-
 
 
 @app.route('/book-appointment', methods=['POST'])
@@ -251,20 +251,56 @@ def cancel_appointment():
     return jsonify({'message': 'Appointment cancelled successfully'}), 200
 
 
-@app.route('/medical-history/<username>', methods=['PUT'])
-@jwt_required()
-def update_latest_medical_history(username):
-    current_identity = get_jwt_identity()
-    if current_identity != username:
-        return jsonify({'message': 'Unauthorized'}), 403
+@app.route('/delete-account/<username>', methods=['DELETE'])
+def delete_account(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'message': 'User does not exist'}), 404
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'User account deleted successfully'}), 200
+
+
+@app.route('/update-contact-info/<username>', methods=['PUT'])
+def update_contact_info(username):
+    data = request.get_json()
+
+    new_email = data.get('email')
+    new_phone = data.get('phone')
 
     user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    if new_email:
+        if User.query.filter_by(email=new_email).first():
+            return jsonify({'message': 'Email already in use'}), 409
+        user.email = new_email
+
+    if new_phone:
+        user.phone = new_phone
+
+    # Commit the changes
+    db.session.commit()
+
+    return jsonify({'message': 'Contact information updated successfully'})
+
+
+@app.route('/medical-history/<username>', methods=['PUT'])
+def update_latest_medical_history(username):
+    data = request.get_json()
+
+    user = User.query.filter_by(username=username).first()
+    print("user " + str(user))
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
     history_entry = MedicalHistoryModel.query.filter_by(user_id=user.username) \
                                              .order_by(MedicalHistoryModel.created_at.desc()) \
                                              .first()
+
+    print("history_entry " + str(history_entry))
     if not history_entry:
         return jsonify({'message': 'No medical history to update'}), 404
 
@@ -297,6 +333,7 @@ def update_latest_medical_history(username):
     return jsonify({'message': 'Medical history updated successfully'}), 200
 
 
+@app.route('/')
 @app.route('/admin/patient-appointments', methods=['GET'])
 @jwt_required()
 def get_all_appointments():
@@ -328,7 +365,6 @@ def get_all_appointments():
     return jsonify({'appointments': results}), 200
 
 
-
 def role_required(required_role):
     def wrapper(fn):
         @wraps(fn)
@@ -355,6 +391,12 @@ def admin_required(fn):
 
         return fn(*args, **kwargs)
     return wrapper
+
+
+# with app.app_context():
+#     db.drop_all()
+#     db.create_all()
+#     print("done")
 
 
 if __name__ == '__main__':
