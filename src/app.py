@@ -18,6 +18,7 @@ app.config['JWT_SECRET_KEY'] = 'my_secret_key'
 jwt = JWTManager(app)
 load_dotenv()
 app.config.from_object(Config)
+
 CORS(app)
 
 db.init_app(app)
