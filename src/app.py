@@ -43,11 +43,11 @@ def register():
 
     print("email h " + str(email_h))
 
-    # if User.query.filter_by(email_hash=email_h).first():
-    #     return jsonify({'message': 'User with this email already exists'}), 409
+    if User.query.filter_by(email_hash=email_h).first():
+        return jsonify({'message': 'User with this email already exists'}), 409
 
-    # if User.query.filter_by(username=username).first():
-    #     return jsonify({'message': 'User with this username already exists'}), 409
+    if User.query.filter_by(username=username).first():
+        return jsonify({'message': 'User with this username already exists'}), 409
 
     user = User(
         username=username,
@@ -94,8 +94,7 @@ def login():
 
     if user and user.check_password(password):
         access_token = create_access_token(
-            identity=user.username,  # just the username as a string
-            # put role in separate claims
+            identity=user.username,
             additional_claims={"role": user.role})
 
         return jsonify({'token': access_token}), 200

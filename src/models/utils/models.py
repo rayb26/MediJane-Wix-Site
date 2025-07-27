@@ -9,12 +9,12 @@ db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 # do print(Fernet.generate_key()) to create your own key and paste in here
-key = b'<generated_key>'
+key = b'<fernet_key>'
 f = Fernet(key)
 
 
 class EncryptedMixin:
-    _fernet = f  # Your Fernet instance, defined outside
+    _fernet = f
 
     @classmethod
     def __init_subclass__(cls):
@@ -23,17 +23,14 @@ class EncryptedMixin:
         encrypted_fields = getattr(cls, "__encrypted_fields__", [])
 
         for field in encrypted_fields:
-            # Define the underlying LargeBinary column _field dynamically
             setattr(cls, f"_{field}", db.Column(LargeBinary))
 
-            # Define getter
             def getter(self, fname=field):
                 raw = getattr(self, f"_{fname}")
                 if raw is None:
                     return None
                 return self._fernet.decrypt(raw).decode()
 
-            # Define setter
             def setter(self, value, fname=field):
                 if value is None:
                     setattr(self, f"_{fname}", None)
@@ -41,7 +38,6 @@ class EncryptedMixin:
                     setattr(self, f"_{fname}",
                             self._fernet.encrypt(value.encode()))
 
-            # Attach property to class dynamically
             setattr(cls, field, property(getter, setter))
 
 
