@@ -9,7 +9,7 @@ from models.utils.helpers import get_username_from_token, get_username_from_toke
 from flask_jwt_extended.exceptions import JWTDecodeError
 from models.utils.models import User, db, bcrypt, MedicalHistoryModel, Appointment
 from werkzeug.security import check_password_hash, generate_password_hash
-
+from models.utils.models import hash_email
 from dotenv import load_dotenv
 
 app = Flask(__name__)
@@ -29,6 +29,7 @@ with app.app_context():
 
 @app.route('/register', methods=['POST'])
 def register():
+
     data = request.get_json()
     username = data.get('username')
     email = data.get('email')
@@ -38,13 +39,23 @@ def register():
     if not all([username, email, password, phone]):
         return jsonify({'message': 'All fields are required'}), 400
 
-    if User.query.filter_by(email=email).first():
-        return jsonify({'message': 'User with this email already exists'}), 409
+    email_h = hash_email(email)
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({'message': 'User with this username already exists'}), 409
+    print("email h " + str(email_h))
 
-    user = User(username=username, email=email, phone=phone, role="user")
+    # if User.query.filter_by(email_hash=email_h).first():
+    #     return jsonify({'message': 'User with this email already exists'}), 409
+
+    # if User.query.filter_by(username=username).first():
+    #     return jsonify({'message': 'User with this username already exists'}), 409
+
+    user = User(
+        username=username,
+        email=email,          # encrypted transparently
+        email_hash=email_h,   # plain hash for lookups
+        phone=phone,          # encrypted transparently
+        role="user"
+    )
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -149,6 +160,7 @@ def get_appointment(username):
 @app.route('/medical-history', methods=['POST'])
 def submit_medical_history():
     data = request.get_json()
+    print("data is " + str(data))
     auth_header = request.headers.get('Authorization', None)
     if not auth_header:
         return jsonify({'message': 'Missing authorization header'}), 401
@@ -192,6 +204,7 @@ def submit_medical_history():
     except JWTDecodeError as e:
         return jsonify({'message': 'Invalid token'}), 401
     except Exception as e:
+        print("execption " + str(e))
         return jsonify({'message': 'Error processing token'}), 400
 
 
@@ -274,14 +287,15 @@ def update_contact_info(username):
         return jsonify({'message': 'User not found'}), 404
 
     if new_email:
-        if User.query.filter_by(email=new_email).first():
+        email_h = hash_email(new_email)
+        if User.query.filter_by(email_hash=email_h).first():
             return jsonify({'message': 'Email already in use'}), 409
         user.email = new_email
+        user.email_hash = email_h  # update hash too
 
     if new_phone:
         user.phone = new_phone
 
-    # Commit the changes
     db.session.commit()
 
     return jsonify({'message': 'Contact information updated successfully'})
@@ -393,11 +407,10 @@ def admin_required(fn):
     return wrapper
 
 
-# with app.app_context():
-#     db.drop_all()
-#     db.create_all()
-#     print("done")
-
-
 if __name__ == '__main__':
+    # If you want to do a db migration, the easist thing to do is uncomment the follwing
+    # with app.app_context():
+    #     db.drop_all()
+    #     db.create_all()
+    #     print("done")
     app.run(debug=True, port=5001)
