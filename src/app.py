@@ -1,4 +1,5 @@
 from functools import wraps
+import stripe, os
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, decode_token, get_jwt
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 
 app = Flask(__name__)
 
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Stripe secret key stored in .env
 app.config['JWT_SECRET_KEY'] = 'my_secret_key'
 jwt = JWTManager(app)
 load_dotenv()
@@ -378,6 +380,38 @@ def get_all_appointments():
     return jsonify({'appointments': results}), 200
 
 
+
+@app.route('/create-checkout-session', methods=['POST'])
+def create_checkout_session():
+    data = request.get_json()
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[
+                {
+                    'price_data': {
+                        'currency': 'usd',
+                        'unit_amount': 5000,  # $50.00 in cents
+                        'product_data': {
+                            'name': 'Consultation Appointment',
+                            'description': f"{data['day']} at {data['time']} with {data['provider']}"
+                        },
+                    },
+                    'quantity': 1,
+                }
+            ],
+            mode='payment',
+            success_url='http://localhost:3000/success', 
+            cancel_url='http://localhost:3000/cancel',    
+        )
+
+        return jsonify({'url': checkout_session.url})
+    
+    except Exception as e:
+        print(f"Stripe error: {e}")
+        return jsonify(error=str(e)), 500
+
 def role_required(required_role):
     def wrapper(fn):
         @wraps(fn)
@@ -408,8 +442,8 @@ def admin_required(fn):
 
 if __name__ == '__main__':
     # If you want to do a db migration, the easist thing to do is uncomment the follwing
-    # with app.app_context():
-    #     db.drop_all()
+    #with app.app_context():
+    #    db.drop_all()
     #     db.create_all()
     #     print("done")
     app.run(debug=True, port=5001)
