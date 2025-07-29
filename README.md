@@ -92,4 +92,10 @@ psql -U your_username -d your_database_name -h localhost -p 5432
 ## Troubleshooting
 - If you get "connection refused": run `brew services start postgresql`
 - If you get "authentication failed": make sure you're using the correct username and password
+- If you are having issues with the DB having the most up to date schema, try adding the following code to the app.py file and execute it under the main
+
+# with app.app_context():
+#     db.drop_all()
+#     db.create_all()
+#     print("done")
 - If you get "database does not exist": create the database first using Step 2
