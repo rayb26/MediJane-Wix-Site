@@ -1,20 +1,62 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
+from cryptography.fernet import Fernet
+from sqlalchemy import LargeBinary
+import hashlib
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 
+# do print(Fernet.generate_key()) to create your own key and paste in here
+key = b'<fernet_key>'
+f = Fernet(key)
 
-class User(db.Model):
+
+class EncryptedMixin:
+    _fernet = f
+
+    @classmethod
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+
+        encrypted_fields = getattr(cls, "__encrypted_fields__", [])
+
+        for field in encrypted_fields:
+            setattr(cls, f"_{field}", db.Column(LargeBinary))
+
+            def getter(self, fname=field):
+                raw = getattr(self, f"_{fname}")
+                if raw is None:
+                    return None
+                return self._fernet.decrypt(raw).decode()
+
+            def setter(self, value, fname=field):
+                if value is None:
+                    setattr(self, f"_{fname}", None)
+                else:
+                    setattr(self, f"_{fname}",
+                            self._fernet.encrypt(value.encode()))
+
+            setattr(cls, field, property(getter, setter))
+
+
+def hash_email(email: str) -> str:
+    return hashlib.sha256(email.encode()).hexdigest()
+
+
+class User(db.Model, EncryptedMixin):
+    __tablename__ = 'users'
+
+    __encrypted_fields__ = ['email', 'phone']
+
     username = db.Column(db.String(80), primary_key=True,
                          unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
+    email_hash = db.Column(db.String(64), unique=True,
+                           nullable=False, index=True)
     password_hash = db.Column(db.String(128), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='user')
 
-    # Relationships with cascade delete to clean up related records on user deletion
     medical_histories = db.relationship(
         'MedicalHistoryModel', backref='user', cascade='all, delete-orphan')
     appointments = db.relationship(
@@ -28,32 +70,27 @@ class User(db.Model):
         return bcrypt.check_password_hash(self.password_hash, password)
 
 
-class MedicalHistoryModel(db.Model):
+class MedicalHistoryModel(db.Model, EncryptedMixin):
+    __tablename__ = "medical_history"
+    __encrypted_fields__ = [
+        "first_name", "last_name", "birth_date", "gender", "weight",
+        "height", "allergies", "medications", "conditions", "injuries",
+        "reason_for_visit", "additional_comments"
+    ]
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(80), db.ForeignKey(
-        'user.username'), nullable=False)
-    first_name = db.Column(db.String(100))
-    last_name = db.Column(db.String(100))
-    birth_date = db.Column(db.String(20))
-    gender = db.Column(db.String(20))
-    weight = db.Column(db.String(20))
-    height = db.Column(db.String(20))
-    allergies = db.Column(db.Text)
-    medications = db.Column(db.Text)
-    conditions = db.Column(db.Text)
-    injuries = db.Column(db.Text)
+        "users.username"), nullable=False)
+
     has_used_cannabis = db.Column(db.Boolean)
-    reason_for_visit = db.Column(db.Text)
-    additional_comments = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-class Appointment(db.Model):
+class Appointment(db.Model, EncryptedMixin):
+    __encrypted_fields__ = ['day', 'time', 'location', 'provider']
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(80), db.ForeignKey(
-        'user.username'), nullable=False)
-    day = db.Column(db.String(20), nullable=False)
-    time = db.Column(db.String(20), nullable=False)
-    location = db.Column(db.String(100), nullable=False)
-    provider = db.Column(db.String(100), nullable=False)
+        "users.username"), nullable=False)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
