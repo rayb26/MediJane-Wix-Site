@@ -124,6 +124,7 @@ def login():
 
 
 @app.route('/book-appointment', methods=['POST'])
+@jwt_required()
 def book_appointment():
     data = request.get_json()
 
@@ -133,22 +134,27 @@ def book_appointment():
     location = data.get('location')
     provider = data.get('provider')
 
-    if not username:
-        return jsonify({'error': 'Missing username'}), 400
+    if not username or not day or not time:
+        return jsonify({'error': 'Missing required fields'}), 400
 
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    appointment = Appointment(
-        user_id=user.username,
+    # Find the available appointment slot (user_id='system')
+    available_slot = Appointment.query.filter_by(
+        user_id='system',
         day=day,
         time=time,
         location=location,
         provider=provider
-    )
+    ).first()
 
-    db.session.add(appointment)
+    if not available_slot:
+        return jsonify({'error': 'Appointment slot not available'}), 409
+
+    # Assign this slot to the patient (book it)
+    available_slot.user_id = user.username
     db.session.commit()
 
     return jsonify({'message': 'Appointment booked successfully'}), 200
@@ -428,6 +434,7 @@ def get_appointment_times():
                 continue
 
             results.append({
+                'id': appt.id,
                 'patient_id': appt.user_id,
                 'date': appt.day,
                 'time': appt.time,

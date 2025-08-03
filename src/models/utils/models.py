@@ -10,7 +10,7 @@ db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 # do print(Fernet.generate_key()) to create your own key and paste in here
-key = b'<0zJ1kVAKXZ7xeCclD5Opqkuj31vf5dm6CX0HJFENHwI=>'
+key = b'#'
 f = Fernet(key)
 
 
