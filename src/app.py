@@ -1,5 +1,6 @@
 from functools import wraps
-import stripe, os
+import stripe
+import os
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, decode_token, get_jwt
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -15,7 +16,8 @@ from dotenv import load_dotenv
 
 app = Flask(__name__)
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # Stripe secret key stored in .env
+# Stripe secret key stored in .env
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 app.config['JWT_SECRET_KEY'] = 'my_secret_key'
 jwt = JWTManager(app)
 load_dotenv()
@@ -25,8 +27,25 @@ CORS(app)
 db.init_app(app)
 bcrypt.init_app(app)
 
+
+@app.shell_context_processor
+def make_shell_context():
+    return {'db': db, 'User': User}
+
+
 with app.app_context():
     db.create_all()
+
+
+def admin_required(fn):
+    @wraps(fn)
+    @jwt_required()
+    def wrapper(*args, **kwargs):
+        claims = get_jwt()
+        if claims.get('role') != 'admin':
+            return jsonify({'message': 'Admins only'}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 @app.route('/register', methods=['POST'])
@@ -114,26 +133,27 @@ def book_or_update_appointment():
     location = data.get('location')
     provider = data.get('provider')
 
+    if not username or not day or not time:
+        return jsonify({'error': 'Missing required fields'}), 400
+
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    appointment = Appointment.query.filter_by(user_id=user.username).first()
-    if appointment:
-        appointment.day = day
-        appointment.time = time
-        appointment.location = location
-        appointment.provider = provider
-    else:
-        appointment = Appointment(
-            user_id=user.username,
-            day=day,
-            time=time,
-            location=location,
-            provider=provider
-        )
-        db.session.add(appointment)
+    # Find the available appointment slot (user_id='system')
+    available_slot = Appointment.query.filter_by(
+        user_id='system',
+        day=day,
+        time=time,
+        location=location,
+        provider=provider
+    ).first()
 
+    if not available_slot:
+        return jsonify({'error': 'Appointment slot not available'}), 409
+
+    # Assign this slot to the patient (book it)
+    available_slot.user_id = user.username
     db.session.commit()
 
     return jsonify({'message': 'Appointment booked or updated successfully'}), 200
@@ -351,6 +371,82 @@ def update_latest_medical_history(username):
     db.session.commit()
     return jsonify({'message': 'Medical history updated successfully'}), 200
 
+# admin create times endpoint
+
+
+def create_system_user():
+    system_user = User.query.filter_by(username='system').first()
+    if not system_user:
+        system_user = User(
+            username='system',
+            email='system@example.com',
+            email_hash=hash_email('system@example.com'),
+            role='system'  # or 'admin' if you prefer
+        )
+        system_user.set_password('irrelevant')
+        db.session.add(system_user)
+        db.session.commit()
+
+
+@admin_required
+@app.route('/admin/create-appointment-time', methods=['POST'])
+def create_appointment_time():
+    create_system_user()  # Ensure system user exists
+
+    data = request.get_json()
+    start_date = data.get('start_date')  # ISO string expected
+    end_date = data.get('end_date')      # ISO string expected
+    location = data.get('location', 'N/A')
+    provider = data.get('provider', 'N/A')
+
+    if not start_date or not end_date:
+        return jsonify({'message': 'Missing required fields: start_date and end_date'}), 400
+
+    system_user = User.query.filter_by(username='system').first()
+    if not system_user:
+        return jsonify({'message': 'System user not found, please create it first'}), 500
+
+    appt = Appointment(
+        user_id=system_user.username,
+        day=start_date.split("T")[0],
+        time=start_date.split("T")[1][:5],
+        location=location,
+        provider=provider
+    )
+    db.session.add(appt)
+    db.session.commit()
+
+    return jsonify({'message': 'Appointment time slot created successfully'}), 201
+
+
+@app.route('/get-appointment-times', methods=['GET'])
+@jwt_required()
+def get_appointment_times():
+    appointments = Appointment.query.all()
+    results = []
+
+    for appt in appointments:
+        try:
+            # Skip anything that can't parse to a valid date
+            if len(appt.day) > 15 or len(appt.time) > 10:
+                # This is likely encrypted junk from old Fernet key
+                continue
+
+            results.append({
+                'id': appt.id,
+                'patient_id': appt.user_id,
+                'date': appt.day,
+                'time': appt.time,
+                'location': appt.location,
+                'provider': appt.provider,
+            })
+        except Exception as e:
+            print(f"Skipping corrupted appointment: {e}")
+            continue
+    print("results " + str(results))
+
+    return jsonify({'appointments': results}), 200
+
 
 @app.route('/')
 @app.route('/admin/patient-appointments', methods=['GET'])
@@ -384,6 +480,60 @@ def get_all_appointments():
     return jsonify({'appointments': results}), 200
 
 
+@app.route('/admin/user-count', methods=['GET'])
+@jwt_required()
+def get_user_count():
+    claims = get_jwt()
+    if claims.get('role') != 'admin':
+        return jsonify({'message': 'Admins only'}), 403
+
+    user_count = User.query.count()
+    return jsonify({'count': user_count}), 200
+
+
+@app.route('/admin/upcoming-appointments', methods=['GET'])
+@jwt_required()
+def get_upcoming_appointments():
+    identity = get_jwt_identity()
+    claims = get_jwt()
+
+    # Only admins can view this
+    if claims.get('role') != 'admin':
+        return jsonify({'message': 'Admins only'}), 403
+
+    today = datetime.utcnow().date()
+    one_week_later = today + timedelta(days=7)
+
+    # Query all appointments in the next week
+    appointments = Appointment.query.all()
+    results = []
+
+    for appt in appointments:
+        try:
+            appt_date = datetime.strptime(appt.day, "%Y-%m-%d").date()
+        except ValueError:
+            # skip if date is invalid
+            continue
+
+        if today <= appt_date <= one_week_later:
+            user = User.query.filter_by(username=appt.user_id).first()
+            if not user:
+                continue
+
+            results.append({
+                "username": user.username,
+                "date": appt.day,
+                "time": appt.time,
+                "location": appt.location,
+                "provider": appt.provider,
+                "created_at": appt.created_at.isoformat()
+            })
+
+    # Sort by date/time for convenience in calendar view
+    results.sort(key=lambda x: (x["date"], x["time"]))
+
+    return jsonify({"appointments": results}), 200
+
 
 @app.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
@@ -406,15 +556,16 @@ def create_checkout_session():
                 }
             ],
             mode='payment',
-            success_url='http://localhost:3000/success', 
-            cancel_url='http://localhost:3000/cancel',    
+            success_url='http://localhost:3000/success',
+            cancel_url='http://localhost:3000/cancel',
         )
 
         return jsonify({'url': checkout_session.url})
-    
+
     except Exception as e:
         print(f"Stripe error: {e}")
         return jsonify(error=str(e)), 500
+
 
 def role_required(required_role):
     def wrapper(fn):
@@ -429,25 +580,47 @@ def role_required(required_role):
     return wrapper
 
 
-def admin_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        username = request.get_json().get("username")
-        if not username:
-            return jsonify({"message": "unable to parse request"}, 400)
-        user = User.query.filter_by(username=username).first()
+# def admin_required(fn):
+#     @wraps(fn)
+#     @jwt_required()
+#     def wrapper(*args, **kwargs):
+#         claims = get_jwt()
+#         if claims.get('role') != 'admin':
+#             return jsonify({'message': 'Admins only'}), 403
+#         return fn(*args, **kwargs)
+#     return wrapper
 
-        if not user or user.role != 'admin':
-            return jsonify({'message': 'Admins only!'}), 403
 
-        return fn(*args, **kwargs)
-    return wrapper
+def create_admin():
+    username = "admin"
+    email = "admin@example.com"
+    password = "SuperSecurePassword"
+
+    # Check if admin already exists
+    existing = User.query.filter_by(username=username).first()
+    if existing:
+        print("✅ Admin user already exists.")
+        return
+
+    admin = User(
+        username=username,
+        email=email,
+        email_hash=hash_email(email),
+        role="admin"
+    )
+    admin.set_password(password)
+
+    db.session.add(admin)
+    db.session.commit()
+    print("🎉 Admin created successfully!")
 
 
 if __name__ == '__main__':
     # If you want to do a db migration, the easist thing to do is uncomment the follwing
-    #with app.app_context():
+    # with app.app_context():
     #    db.drop_all()
     #     db.create_all()
     #     print("done")
+    # with app.app_context():
+    #     create_admin()
     app.run(debug=True, port=5001)

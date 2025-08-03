@@ -1,15 +1,16 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import LargeBinary
 import hashlib
+
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 # do print(Fernet.generate_key()) to create your own key and paste in here
-key = b'<0zJ1kVAKXZ7xeCclD5Opqkuj31vf5dm6CX0HJFENHwI=>'
+key = b'#'
 f = Fernet(key)
 
 
@@ -29,7 +30,16 @@ class EncryptedMixin:
                 raw = getattr(self, f"_{fname}")
                 if raw is None:
                     return None
-                return self._fernet.decrypt(raw).decode()
+                try:
+                    return self._fernet.decrypt(raw).decode()
+                except InvalidToken:
+                    # Decryption failed — maybe data was plaintext or key changed
+                    try:
+                        # Attempt to decode as plaintext fallback
+                        return raw.decode()
+                    except Exception:
+                        # Give up and return raw bytes if decode also fails
+                        return raw
 
             def setter(self, value, fname=field):
                 if value is None:
