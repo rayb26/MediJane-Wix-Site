@@ -105,7 +105,7 @@ def login():
 
 
 @app.route('/book-appointment', methods=['POST'])
-def book_appointment():
+def book_or_update_appointment():
     data = request.get_json()
 
     username = data.get('username')
@@ -114,25 +114,29 @@ def book_appointment():
     location = data.get('location')
     provider = data.get('provider')
 
-    if not username:
-        return jsonify({'error': 'Missing username'}), 400
-
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    appointment = Appointment(
-        user_id=user.username,
-        day=day,
-        time=time,
-        location=location,
-        provider=provider
-    )
+    appointment = Appointment.query.filter_by(user_id=user.username).first()
+    if appointment:
+        appointment.day = day
+        appointment.time = time
+        appointment.location = location
+        appointment.provider = provider
+    else:
+        appointment = Appointment(
+            user_id=user.username,
+            day=day,
+            time=time,
+            location=location,
+            provider=provider
+        )
+        db.session.add(appointment)
 
-    db.session.add(appointment)
     db.session.commit()
 
-    return jsonify({'message': 'Appointment booked successfully'}), 200
+    return jsonify({'message': 'Appointment booked or updated successfully'}), 200
 
 
 @app.route('/appointment/<username>', methods=['GET'])
