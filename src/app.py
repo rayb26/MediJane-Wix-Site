@@ -124,8 +124,7 @@ def login():
 
 
 @app.route('/book-appointment', methods=['POST'])
-@jwt_required()
-def book_appointment():
+def book_or_update_appointment():
     data = request.get_json()
 
     username = data.get('username')
@@ -157,7 +156,7 @@ def book_appointment():
     available_slot.user_id = user.username
     db.session.commit()
 
-    return jsonify({'message': 'Appointment booked successfully'}), 200
+    return jsonify({'message': 'Appointment booked or updated successfully'}), 200
 
 
 @app.route('/appointment/<username>', methods=['GET'])
