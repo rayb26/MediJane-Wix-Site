@@ -10,7 +10,8 @@ db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 # do print(Fernet.generate_key()) to create your own key and paste in here
-key = b'#'
+key = b'v8fD5qJpdKzZ1bD6LGEyOZSBdc61Y05n4nsBPZ2B0Jo='
+
 f = Fernet(key)
 
 
@@ -102,5 +103,8 @@ class Appointment(db.Model, EncryptedMixin):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(80), db.ForeignKey(
         "users.username"), nullable=False)
+
+    def __repr__(self):
+        return f"<Appointment day={self.day} time={self.time} location={self.location} provider={self.provider} user_id={self.user_id}>"
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
