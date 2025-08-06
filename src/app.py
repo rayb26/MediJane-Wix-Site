@@ -432,22 +432,21 @@ def get_appointment_times():
     appointments = Appointment.query.all()
     results = []
 
+    print("appointments " + str(appointments))
     for appt in appointments:
         try:
             # Skip anything that can't parse to a valid date
             if len(appt.day) > 15 or len(appt.time) > 10:
                 # This is likely encrypted junk from old Fernet key
                 continue
-            print('appt ' + str(appt))
-            if appt.user_id == 'system':
-                results.append({
-                    'id': appt.id,
-                    'patient_id': appt.user_id,
-                    'date': appt.day,
-                    'time': appt.time,
-                    'location': appt.location,
-                    'provider': appt.provider,
-                })
+            results.append({
+                'id': appt.id,
+                'patient_id': appt.user_id,
+                'date': appt.day,
+                'time': appt.time,
+                'location': appt.location,
+                'provider': appt.provider,
+            })
         except Exception as e:
             print(f"Skipping corrupted appointment: {e}")
             continue
@@ -469,12 +468,11 @@ def get_all_appointments():
         return jsonify({'message': 'Admins only'}), 403
 
     appointments = Appointment.query.all()
-    print(f"Found {len(appointments)} appointments")
 
     results = []
     for appt in appointments:
         user = User.query.filter_by(username=appt.user_id).first()
-        if not user:
+        if not user or appt.user_id == 'system':
             print(f"No user found for appointment user_id: {appt.user_id}")
             continue
         results.append({
