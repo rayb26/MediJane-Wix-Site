@@ -13,6 +13,7 @@ from models.utils.models import User, db, bcrypt, MedicalHistoryModel, Appointme
 from werkzeug.security import check_password_hash, generate_password_hash
 from models.utils.models import hash_email
 from dotenv import load_dotenv
+from sqlalchemy import and_
 
 app = Flask(__name__)
 
@@ -130,9 +131,8 @@ def book_or_update_appointment():
     username = data.get('username')
     day = data.get('day')
     time = data.get('time')
-    location = data.get('location')
-    provider = data.get('provider')
-
+    location = 'Virtual'
+    provider = 'Admin'
     if not username or not day or not time:
         return jsonify({'error': 'Missing required fields'}), 400
 
@@ -141,13 +141,19 @@ def book_or_update_appointment():
         return jsonify({'error': 'User not found'}), 404
 
     # Find the available appointment slot (user_id='system')
-    available_slot = Appointment.query.filter_by(
-        user_id='system',
-        day=day,
-        time=time,
-        location=location,
-        provider=provider
-    ).first()
+    print(Appointment.query.filter_by(user_id='system').all())
+    print({
+        'day': day,
+        'time': time,
+        'location': location,
+        'provider': provider
+    })
+
+    slots = Appointment.query.filter_by(user_id='system').all()
+    available_slot = next((
+        s for s in slots
+        if s.day == day and s.time == time and s.location == location and s.provider == provider
+    ), None)
 
     if not available_slot:
         return jsonify({'error': 'Appointment slot not available'}), 409
@@ -157,6 +163,40 @@ def book_or_update_appointment():
     db.session.commit()
 
     return jsonify({'message': 'Appointment booked or updated successfully'}), 200
+
+
+@admin_required
+@app.route('/admin/create-appointment-time', methods=['POST'])
+def create_appointment_time():
+    create_system_user()  # Ensure system user exists
+
+    data = request.get_json()
+    start_date = data.get('start_date')  # ISO string expected
+    end_date = data.get('end_date')      # ISO string expected
+    location = data.get('location', 'Virtual')
+    provider = data.get('provider', 'Admin')
+
+    if not start_date or not end_date:
+        return jsonify({'message': 'Missing required fields: start_date and end_date'}), 400
+
+    system_user = User.query.filter_by(username='system').first()
+    if not system_user:
+        return jsonify({'message': 'System user not found, please create it first'}), 500
+
+    print("start date day " + str(start_date.split("T")[0]) + " time " + str(
+        start_date.split("T")[1][:5]) + " provider " + str(provider))
+    appt = Appointment(
+        user_id=system_user.username,
+        day=start_date.split("T")[0],
+        time=start_date.split("T")[1][:5],
+        location=location,
+        provider=provider
+    )
+
+    db.session.add(appt)
+    db.session.commit()
+
+    return jsonify({'message': 'Appointment time slot created successfully'}), 201
 
 
 @app.route('/appointment/<username>', methods=['GET'])
@@ -283,7 +323,7 @@ def cancel_appointment():
     if not appointment:
         return jsonify({'message': 'No appointment to cancel'}), 404
 
-    db.session.delete(appointment)
+    appointment.user_id = 'system'
     db.session.commit()
 
     return jsonify({'message': 'Appointment cancelled successfully'}), 200
@@ -331,7 +371,6 @@ def update_latest_medical_history(username):
     data = request.get_json()
 
     user = User.query.filter_by(username=username).first()
-    print("user " + str(user))
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
@@ -339,7 +378,6 @@ def update_latest_medical_history(username):
                                              .order_by(MedicalHistoryModel.created_at.desc()) \
                                              .first()
 
-    print("history_entry " + str(history_entry))
     if not history_entry:
         return jsonify({'message': 'No medical history to update'}), 404
 
@@ -388,50 +426,19 @@ def create_system_user():
         db.session.commit()
 
 
-@admin_required
-@app.route('/admin/create-appointment-time', methods=['POST'])
-def create_appointment_time():
-    create_system_user()  # Ensure system user exists
-
-    data = request.get_json()
-    start_date = data.get('start_date')  # ISO string expected
-    end_date = data.get('end_date')      # ISO string expected
-    location = data.get('location', 'N/A')
-    provider = data.get('provider', 'N/A')
-
-    if not start_date or not end_date:
-        return jsonify({'message': 'Missing required fields: start_date and end_date'}), 400
-
-    system_user = User.query.filter_by(username='system').first()
-    if not system_user:
-        return jsonify({'message': 'System user not found, please create it first'}), 500
-
-    appt = Appointment(
-        user_id=system_user.username,
-        day=start_date.split("T")[0],
-        time=start_date.split("T")[1][:5],
-        location=location,
-        provider=provider
-    )
-    db.session.add(appt)
-    db.session.commit()
-
-    return jsonify({'message': 'Appointment time slot created successfully'}), 201
-
-
 @app.route('/get-appointment-times', methods=['GET'])
 @jwt_required()
 def get_appointment_times():
     appointments = Appointment.query.all()
     results = []
 
+    print("appointments " + str(appointments))
     for appt in appointments:
         try:
             # Skip anything that can't parse to a valid date
             if len(appt.day) > 15 or len(appt.time) > 10:
                 # This is likely encrypted junk from old Fernet key
                 continue
-
             results.append({
                 'id': appt.id,
                 'patient_id': appt.user_id,
@@ -461,12 +468,11 @@ def get_all_appointments():
         return jsonify({'message': 'Admins only'}), 403
 
     appointments = Appointment.query.all()
-    print(f"Found {len(appointments)} appointments")
 
     results = []
     for appt in appointments:
         user = User.query.filter_by(username=appt.user_id).first()
-        if not user:
+        if not user or appt.user_id == 'system':
             print(f"No user found for appointment user_id: {appt.user_id}")
             continue
         results.append({
@@ -618,7 +624,7 @@ def create_admin():
 if __name__ == '__main__':
     # If you want to do a db migration, the easist thing to do is uncomment the follwing
     # with app.app_context():
-    #    db.drop_all()
+    #     db.drop_all()
     #     db.create_all()
     #     print("done")
     # with app.app_context():
