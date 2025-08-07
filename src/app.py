@@ -544,6 +544,7 @@ def get_upcoming_appointments():
 @app.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
     data = request.get_json()
+    username = data.get("username")
 
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -552,7 +553,7 @@ def create_checkout_session():
                 {
                     'price_data': {
                         'currency': 'usd',
-                        'unit_amount': 5000,  # $50.00 in cents
+                        'unit_amount': 5000,
                         'product_data': {
                             'name': 'Consultation Appointment',
                             'description': f"{data['day']} at {data['time']} with {data['provider']}"
@@ -566,11 +567,45 @@ def create_checkout_session():
             cancel_url='http://localhost:3000/cancel',
         )
 
+        # Save checkout_session.payment_intent in the database
+        appointment = Appointment.query.filter_by(user_id=username).order_by(Appointment.created_at.desc()).first()
+        if appointment:
+            appointment.stripe_payment_intent = checkout_session.payment_intent
+            db.session.commit()
+
         return jsonify({'url': checkout_session.url})
 
     except Exception as e:
         print(f"Stripe error: {e}")
         return jsonify(error=str(e)), 500
+
+@app.route('/refund', methods=['POST'])
+def refund_payment():
+    data = request.get_json()
+    username = data.get("username")
+
+    if not username:
+        return jsonify({"message": "Username is required"}), 400
+
+    appointment = Appointment.query.filter_by(user_id=username).first()
+    if not appointment or not appointment.stripe_payment_intent:
+        return jsonify({"message": "No payment intent found for this appointment"}), 404
+
+    try:
+        refund = stripe.Refund.create(
+            payment_intent=appointment.stripe_payment_intent
+        )
+
+        # Optionally, reset user_id and remove intent
+        appointment.user_id = "system"
+        appointment.stripe_payment_intent = None
+        db.session.commit()
+
+        return jsonify({"message": "Refund issued successfully"}), 200
+
+    except stripe.error.StripeError as e:
+        print(f"Stripe error: {e}")
+        return jsonify({"message": "Stripe refund failed", "error": str(e)}), 500
 
 
 def role_required(required_role):
@@ -623,10 +658,10 @@ def create_admin():
 
 if __name__ == '__main__':
     # If you want to do a db migration, the easist thing to do is uncomment the follwing
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        print("done")
-    with app.app_context():
-        create_admin()
+    # with app.app_context():
+    #     db.drop_all()
+    #     db.create_all()
+    #     print("done")
+    # with app.app_context():
+    #     create_admin()
     app.run(debug=True, port=5001)
