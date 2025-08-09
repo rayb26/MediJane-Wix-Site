@@ -10,8 +10,7 @@ db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 # do print(Fernet.generate_key()) to create your own key and paste in here
-key = b'v8fD5qJpdKzZ1bD6LGEyOZSBdc61Y05n4nsBPZ2B0Jo='
-
+key = b'F8CHHta3phgFeIp2Ep2ivl5PYvQno7fgQtne1ij3vRA='
 f = Fernet(key)
 
 
@@ -101,10 +100,15 @@ class Appointment(db.Model, EncryptedMixin):
     __encrypted_fields__ = ['day', 'time', 'location', 'provider']
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(80), db.ForeignKey(
-        "users.username"), nullable=False)
+    user_id = db.Column(db.String(80), db.ForeignKey("users.username"), nullable=False)
 
-    def __repr__(self):
-        return f"<Appointment day={self.day} time={self.time} location={self.location} provider={self.provider} user_id={self.user_id}>"
+    day = db.Column(db.String(10))         # or appropriate type, e.g. Date or String
+    time = db.Column(db.String(5))         # or Time
+    location = db.Column(db.String(255))
+    provider = db.Column(db.String(80))
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    stripe_payment_intent = db.Column(db.String, nullable=True)
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
+
+
