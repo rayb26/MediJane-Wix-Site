@@ -14,7 +14,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from models.utils.models import hash_email
 from dotenv import load_dotenv
 from sqlalchemy import and_
-import timedelta, datetime
+import timedelta
+import datetime
 app = Flask(__name__)
 
 # Stripe secret key stored in .env
@@ -308,18 +309,13 @@ def get_medical_history(username):
     return jsonify({'medical_history': history_data}), 200
 
 
-@app.route('/cancel-appointment', methods=['DELETE'])
-def cancel_appointment():
-    data = request.get_json()
-
-    username = data.get("username")
-    if not username:
+@app.route('/cancel-appointment/<string:username>', methods=['DELETE'])
+def cancel_appointment(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
         return jsonify({'message': 'User not found'}), 404
 
-    user = User.query.filter_by(username=username).first()
-
     appointment = Appointment.query.filter_by(user_id=user.username).first()
-
     if not appointment:
         return jsonify({'message': 'No appointment to cancel'}), 404
 
@@ -568,7 +564,8 @@ def create_checkout_session():
         )
 
         # Save checkout_session.payment_intent in the database
-        appointment = Appointment.query.filter_by(user_id=username).order_by(Appointment.created_at.desc()).first()
+        appointment = Appointment.query.filter_by(
+            user_id=username).order_by(Appointment.created_at.desc()).first()
         if appointment:
             appointment.stripe_payment_intent = checkout_session.payment_intent
             db.session.commit()
@@ -578,6 +575,7 @@ def create_checkout_session():
     except Exception as e:
         print(f"Stripe error: {e}")
         return jsonify(error=str(e)), 500
+
 
 @app.route('/refund', methods=['POST'])
 def refund_payment():
