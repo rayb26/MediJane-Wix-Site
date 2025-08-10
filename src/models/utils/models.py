@@ -100,7 +100,15 @@ class Appointment(db.Model, EncryptedMixin):
     __encrypted_fields__ = ['day', 'time', 'location', 'provider']
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(80), db.ForeignKey(
-        "users.username"), nullable=False)
+    user_id = db.Column(db.String(80), db.ForeignKey("users.username"), nullable=False)
+
+    day = db.Column(db.String(10))         # or appropriate type, e.g. Date or String
+    time = db.Column(db.String(5))         # or Time
+    location = db.Column(db.String(255))
+    provider = db.Column(db.String(80))
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    stripe_payment_intent = db.Column(db.String, nullable=True)
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
+
+
