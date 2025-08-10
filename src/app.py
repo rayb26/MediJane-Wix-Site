@@ -13,6 +13,7 @@ from models.utils.models import User, db, bcrypt, MedicalHistoryModel, Appointme
 from werkzeug.security import check_password_hash, generate_password_hash
 from models.utils.models import hash_email
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
@@ -117,7 +118,7 @@ def login():
         access_token = create_access_token(
             identity=user.username,
             additional_claims={"role": user.role})
-
+        print("USER", user)
         return jsonify({'token': access_token}), 200
     else:
         return jsonify({'message': 'Invalid username or password'}), 401
@@ -566,6 +567,18 @@ def create_checkout_session():
         print(f"Stripe error: {e}")
         return jsonify(error=str(e)), 500
 
+
+@app.route('/user-info/<username>', methods=['GET'])
+def get_user_info(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    return jsonify({
+        'username': user.username,
+        'email': user.email,
+        'phone': user.phone
+    }), 200
 
 def role_required(required_role):
     def wrapper(fn):
