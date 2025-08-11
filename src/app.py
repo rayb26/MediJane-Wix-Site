@@ -577,20 +577,6 @@ def create_checkout_session():
         print(f"Stripe error: {e}")
         return jsonify(error=str(e)), 500
 
-
-@app.route('/user-info/<username>', methods=['GET'])
-def get_user_info(username):
-    user = User.query.filter_by(username=username).first()
-    if not user:
-        return jsonify({'message': 'User not found'}), 404
-
-    return jsonify({
-        'username': user.username,
-        'email': user.email,
-        'phone': user.phone
-    }), 200
-
-
 @app.route('/refund', methods=['POST'])
 def refund_payment():
     data = request.get_json()
@@ -674,6 +660,7 @@ if __name__ == '__main__':
     #     db.drop_all()
     #     db.create_all()
     #     print("done")
-    # with app.app_context():
-    #     create_admin()
+    with app.app_context():
+        create_admin()
+        
     app.run(debug=True, port=5001)

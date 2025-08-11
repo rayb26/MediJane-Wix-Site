@@ -5,6 +5,6 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "lilly")
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        "postgresql://sabrina:lilly@localhost:5432/db_sabrina"
+        "postgresql://sabrinah:lilly@localhost:5432/db_sabrina"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
