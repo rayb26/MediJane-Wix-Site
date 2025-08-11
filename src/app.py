@@ -662,10 +662,10 @@ def create_admin():
 
 if __name__ == '__main__':
     # If you want to do a db migration, the easist thing to do is uncomment the follwing
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        print("done")
-    with app.app_context():
-        create_admin()
+    # with app.app_context():
+    #     db.drop_all()
+    #     db.create_all()
+    #     print("done")
+    # with app.app_context():
+    #     create_admin()
     app.run(debug=True, port=5001)
