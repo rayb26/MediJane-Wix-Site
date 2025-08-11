@@ -452,15 +452,10 @@ def get_appointment_times():
     return jsonify({'appointments': results}), 200
 
 
-@app.route('/')
 @app.route('/admin/patient-appointments', methods=['GET'])
 @jwt_required()
 def get_all_appointments():
-    identity = get_jwt_identity()
     claims = get_jwt()
-    print("Identity:", identity)
-    print("Claims:", claims)
-
     if claims.get('role') != 'admin':
         return jsonify({'message': 'Admins only'}), 403
 
@@ -468,19 +463,30 @@ def get_all_appointments():
 
     results = []
     for appt in appointments:
-        user = User.query.filter_by(username=appt.user_id).first()
-        if not user or appt.user_id == 'system':
-            print(f"No user found for appointment user_id: {appt.user_id}")
-            continue
-        results.append({
-            'patient_id': user.username,
-            'username': user.username,
-            'date': appt.day,
-            'time': appt.time,
-        })
+        # For booked appointments, get user info
+        if appt.user_id != 'system':
+            user = User.query.filter_by(username=appt.user_id).first()
+            if not user:
+                continue
+            results.append({
+                'patient_id': user.username,
+                'username': user.username,
+                'date': appt.day,
+                'time': appt.time,
+                'booked': True
+            })
+        else:
+            # Available slot
+            results.append({
+                'patient_id': 'system',
+                'username': 'system',
+                'date': appt.day,
+                'time': appt.time,
+                'booked': False
+            })
 
-    print("Results to return:", results)
     return jsonify({'appointments': results}), 200
+
 
 
 @app.route('/admin/user-count', methods=['GET'])
