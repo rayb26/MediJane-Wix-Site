@@ -309,6 +309,22 @@ def get_medical_history(username):
     return jsonify({'medical_history': history_data}), 200
 
 
+@app.route('/admin/delete-appointment/<string:username>', methods=['DELETE'])
+def admin_delete_appointment(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    appointment = Appointment.query.filter_by(user_id='system').first()
+    if not appointment:
+        return jsonify({'message': 'No appointment found for system user'}), 404
+
+    db.session.delete(appointment)
+    db.session.commit()
+
+    return jsonify({'message': 'Appointment deleted successfully'}), 200
+
+
 @app.route('/cancel-appointment/<string:username>', methods=['DELETE'])
 def cancel_appointment(username):
     user = User.query.filter_by(username=username).first()
@@ -485,7 +501,6 @@ def get_all_appointments():
             })
 
     return jsonify({'appointments': results}), 200
-
 
 
 @app.route('/admin/user-count', methods=['GET'])
