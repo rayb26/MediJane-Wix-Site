@@ -133,7 +133,7 @@ def book_or_update_appointment():
     day = data.get('day')
     time = data.get('time')
     location = 'Virtual'
-    provider = 'Admin'
+    provider = 'Dr. Smith'
     if not username or not day or not time:
         return jsonify({'error': 'Missing required fields'}), 400
 
@@ -175,7 +175,7 @@ def create_appointment_time():
     start_date = data.get('start_date')  # ISO string expected
     end_date = data.get('end_date')      # ISO string expected
     location = data.get('location', 'Virtual')
-    provider = data.get('provider', 'Admin')
+    provider = data.get('provider', 'Dr. Smith')
 
     if not start_date or not end_date:
         return jsonify({'message': 'Missing required fields: start_date and end_date'}), 400
