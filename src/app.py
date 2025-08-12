@@ -133,7 +133,7 @@ def book_or_update_appointment():
     day = data.get('day')
     time = data.get('time')
     location = 'Virtual'
-    provider = 'Admin'
+    provider = 'Dr. Smith'
     if not username or not day or not time:
         return jsonify({'error': 'Missing required fields'}), 400
 
@@ -175,7 +175,7 @@ def create_appointment_time():
     start_date = data.get('start_date')  # ISO string expected
     end_date = data.get('end_date')      # ISO string expected
     location = data.get('location', 'Virtual')
-    provider = data.get('provider', 'Admin')
+    provider = data.get('provider', 'Dr. Smith')
 
     if not start_date or not end_date:
         return jsonify({'message': 'Missing required fields: start_date and end_date'}), 400
@@ -307,6 +307,22 @@ def get_medical_history(username):
         })
 
     return jsonify({'medical_history': history_data}), 200
+
+
+@app.route('/admin/delete-appointment/<string:username>', methods=['DELETE'])
+def admin_delete_appointment(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    appointment = Appointment.query.filter_by(user_id='system').first()
+    if not appointment:
+        return jsonify({'message': 'No appointment found for system user'}), 404
+
+    db.session.delete(appointment)
+    db.session.commit()
+
+    return jsonify({'message': 'Appointment deleted successfully'}), 200
 
 
 @app.route('/cancel-appointment/<string:username>', methods=['DELETE'])
@@ -485,7 +501,6 @@ def get_all_appointments():
             })
 
     return jsonify({'appointments': results}), 200
-
 
 
 @app.route('/admin/user-count', methods=['GET'])
